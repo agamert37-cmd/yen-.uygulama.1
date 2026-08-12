@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import pinoHttp from 'pino-http';
 import { authGuard } from './middleware/authGuard';
 import { errorHandler } from './middleware/errorHandler';
+import { actionsRouter } from './routes/actions.routes';
 import { healthRouter } from './routes/health.routes';
 import { importRouter } from './routes/import.routes';
 import { projectsRouter } from './routes/projects.routes';
@@ -22,9 +23,10 @@ export function createApp(): express.Express {
   app.use('/api/health', healthRouter);
 
   app.use('/api', authGuard);
-  // Mounted before /api/projects so its more specific paths (e.g. POST
+  // Mounted before /api/projects so their more specific paths (e.g. POST
   // /api/projects/import/upload) aren't shadowed by projectsRouter's /:id.
   app.use('/api/projects/import', importRouter);
+  app.use('/api/projects', actionsRouter);
   app.use('/api/projects', projectsRouter);
 
   // Serve the built frontend from the same origin/port in production. Routers

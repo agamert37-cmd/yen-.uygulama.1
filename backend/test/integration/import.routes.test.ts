@@ -1,5 +1,3 @@
-process.env.WORKSPACES_ROOT = './.tmp-test-workspaces-import';
-
 import fs from 'node:fs';
 import path from 'node:path';
 import AdmZip from 'adm-zip';
