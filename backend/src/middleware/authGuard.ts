@@ -1,13 +1,6 @@
-import { timingSafeEqual } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import { env } from '../config/env';
-
-function timingSafeEqualString(a: string, b: string): boolean {
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  if (bufA.length !== bufB.length) return false;
-  return timingSafeEqual(bufA, bufB);
-}
+import { timingSafeEqualString } from '../utils/secureCompare';
 
 /**
  * Single shared-secret gate for the whole /api surface (see plan: no
