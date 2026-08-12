@@ -6,6 +6,7 @@ import { projectsRepo } from '../db/repositories/projectsRepo';
 import { requireParam } from '../utils/params';
 import { detectProject } from '../modules/detection/detectionEngine';
 import { projectAbsPath, removeProjectDir } from '../modules/workspace/workspaceManager';
+import { writeEnvFile } from '../modules/files/fileManager';
 
 export const projectsRouter = Router();
 
@@ -55,10 +56,17 @@ projectsRouter.post(
   }),
 );
 
+const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 const patchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   port: z.number().int().min(1).max(65535).nullable().optional(),
-  envVars: z.record(z.string(), z.string()).optional(),
+  envVars: z
+    .record(
+      z.string().regex(ENV_KEY_PATTERN, 'Env var names must look like IDENTIFIERS_LIKE_THIS'),
+      z.string().refine((value) => !/[\r\n]/.test(value), 'Env var values cannot contain newlines'),
+    )
+    .optional(),
 });
 
 projectsRouter.patch(
@@ -69,6 +77,12 @@ projectsRouter.patch(
     if (!existing) throw new HttpError(404, 'Project not found');
     const patch = patchSchema.parse(req.body);
     const updated = projectsRepo.update(id, patch);
+    // The Env tab's source of truth at runtime is the .env file on disk
+    // (what Docker Compose/PM2 actually read) - keep it in sync whenever
+    // envVars is part of the patch, not just the DB cache.
+    if (patch.envVars) {
+      writeEnvFile(projectAbsPath(existing.dirPath), patch.envVars);
+    }
     res.json(updated);
   }),
 );

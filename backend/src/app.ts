@@ -6,6 +6,7 @@ import pinoHttp from 'pino-http';
 import { authGuard } from './middleware/authGuard';
 import { errorHandler } from './middleware/errorHandler';
 import { actionsRouter } from './routes/actions.routes';
+import { filesRouter } from './routes/files.routes';
 import { healthRouter } from './routes/health.routes';
 import { importRouter } from './routes/import.routes';
 import { projectsRouter } from './routes/projects.routes';
@@ -17,7 +18,9 @@ export function createApp(): express.Express {
   app.use(helmet());
   app.use(cors());
   app.use(pinoHttp({ logger }));
-  app.use(express.json({ limit: '2mb' }));
+  // 3mb gives headroom over fileManager's 2MB editable-file cap once JSON
+  // string-escaping overhead is added on top of the raw file content.
+  app.use(express.json({ limit: '3mb' }));
 
   // Health check is exempt from the auth guard so uptime probes don't need the token.
   app.use('/api/health', healthRouter);
@@ -27,6 +30,7 @@ export function createApp(): express.Express {
   // /api/projects/import/upload) aren't shadowed by projectsRouter's /:id.
   app.use('/api/projects/import', importRouter);
   app.use('/api/projects', actionsRouter);
+  app.use('/api/projects', filesRouter);
   app.use('/api/projects', projectsRouter);
 
   // Serve the built frontend from the same origin/port in production. Routers

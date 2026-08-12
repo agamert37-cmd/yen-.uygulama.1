@@ -1,10 +1,12 @@
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../src/app';
 import { db } from '../../src/db';
 import { runMigrations } from '../../src/db/migrate';
 import { projectsRepo } from '../../src/db/repositories/projectsRepo';
 import { env } from '../../src/config/env';
+import { WORKSPACES_ROOT } from '../../src/config/paths';
 
 const app = createApp();
 const TOKEN = env.PANEL_AUTH_TOKEN;
@@ -16,6 +18,12 @@ beforeAll(() => {
 beforeEach(() => {
   db.exec('DELETE FROM deploy_events');
   db.exec('DELETE FROM projects');
+});
+
+afterAll(() => {
+  // PATCH-ing envVars writes a real .env file (see writeEnvFile), so this
+  // suite does touch disk despite otherwise being a DB/route-level test.
+  fs.rmSync(WORKSPACES_ROOT, { recursive: true, force: true });
 });
 
 describe('GET /api/health', () => {
