@@ -3,7 +3,9 @@
 Kendi kendine barındırılan (self-hosted) bir dağıtım/hosting kontrol paneli
 MVP'si: sunucudaki projeleri (Docker veya Node.js) web arayüzünden içeri
 aktarır, türünü otomatik tespit eder, build/run eder, canlı log ve kaynak
-kullanımı gösterir, basit bir dosya yöneticisi/editörü sunar.
+kullanımı gösterir, basit bir dosya yöneticisi/editörü sunar, ve çalışan bir
+projeyi tek tuşla kendi subdomain'inde (Cloudflare Tunnel üzerinden) herkese
+açık yayınlayabilir.
 
 Bu depo bir npm workspaces monorepo'sudur:
 
@@ -46,6 +48,7 @@ web sunucusuna veya reverse proxy'ye gerek yoktur (bkz. Ertelenen Özellikler).
 | `DB_PATH` | SQLite veritabanı dosya yolu |
 | `PANEL_DRIVER` | `mock` (Docker/PM2 simülasyonu) veya `real` (gerçek Docker Engine + PM2) |
 | `PANEL_AUTH_TOKEN` | Tüm `/api/*` isteklerinde ve socket bağlantısında gereken paylaşılan token |
+| `PANEL_DOMAIN` | Projelerin yayınlanacağı taban domain (`https://{subdomain}.PANEL_DOMAIN`). Boş bırakılırsa yayınlama tamamen devre dışı kalır (yerel/dev varsayılanı) |
 
 `PANEL_DRIVER=real` için sunucuda Docker (`/var/run/docker.sock` erişimi ile)
 ve PM2'nin kurulu/erişilebilir olması gerekir.
@@ -74,13 +77,85 @@ ve PM2'nin kurulu/erişilebilir olması gerekir.
   `resolveWithinRoot` ile projenin kendi dizini dışına çıkamayacak şekilde
   doğrulanır; aynı koruma arşiv çıkarma (zip/tar-slip) ve workspace
   yönetiminde de paylaşılır.
+- **Vhost reverse proxy** (`backend/src/modules/proxy`): panel tek bir
+  Express sunucusu olarak kalır — ayrı bir Nginx/Caddy process'i yok. `Host`
+  header'ı `PANEL_DOMAIN`'e veya bir alt subdomain'ine göre incelenir;
+  panelin kendi domain'i normal işleyişe devam eder, bir subdomain
+  `status === 'running'` bir projeye aitse istek o projenin portuna
+  (`http://127.0.0.1:{port}`) canlı olarak (her istekte yeniden kontrol
+  edilerek) proxy'lenir, eşleşme yoksa 404 döner. `PANEL_DOMAIN`
+  tanımlanmadıkça bu katman tamamen devre dışıdır (sıfır davranış
+  değişikliği). Genel internet erişimi ve otomatik TLS, ayrı çalışan bir
+  Cloudflare Tunnel ile sağlanır (bkz. "Projeleri Herkese Açık Yayınlama").
+
+## Projeleri Herkese Açık Yayınlama (Cloudflare Tunnel)
+
+Bir proje `running` durumuna geçtikten sonra, Genel Bakış sekmesindeki
+"Herkese Açık Yayın" bölümünden tek tuşla kendi subdomain'inde
+(`https://{subdomain}.PANEL_DOMAIN`) yayınlanabilir — link kopyalanabilir
+veya QR kod ile telefondan doğrudan açılabilir.
+
+Genel internetten erişim, sunucuda **operatörün kendisinin çalıştırdığı**
+bir [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
+(`cloudflared`) ile sağlanır — panel uygulaması cloudflared'i başlatmaz,
+Cloudflare kimlik bilgisi saklamaz/yönetmez, bu bilinçli bir kapsam kararı.
+
+```bash
+# 1. cloudflared kurulumu
+curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
+chmod +x /usr/local/bin/cloudflared
+
+# 2. Cloudflare hesabınızla kimlik doğrulama
+cloudflared tunnel login
+
+# 3. Adlandırılmış bir tünel oluşturun
+cloudflared tunnel create hosting-panel
+
+# 4. DNS yönlendirme - bare domain VE wildcard AYRI kayıtlardır
+cloudflared tunnel route dns hosting-panel panel.example.com
+cloudflared tunnel route dns hosting-panel '*.panel.example.com'
+
+# 5. ~/.cloudflared/config.yml
+# tunnel: hosting-panel
+# credentials-file: /root/.cloudflared/<TUNNEL-ID>.json
+# ingress:
+#   - hostname: panel.example.com       # panelin kendisi
+#     service: http://localhost:4000
+#   - hostname: "*.panel.example.com"   # yayınlanan projeler
+#     service: http://localhost:4000
+#   - service: http_status:404          # zorunlu catch-all
+
+# 6. Önce ön planda test edin, sonra servis olarak kurun
+cloudflared tunnel run hosting-panel
+cloudflared service install && systemctl enable --now cloudflared
+```
+
+Ardından `backend/.env`'de `PANEL_DOMAIN=panel.example.com` ayarlayıp
+paneli yeniden başlatın. Kritik nokta: `*.panel.example.com` kuralı bare
+`panel.example.com`'u **kapsamaz** — iki ayrı `route dns` ve iki ayrı
+ingress satırı şart. Hangi host'un panelin kendisi, hangisinin yayınlanan
+bir proje olduğu ayrımını cloudflared değil, panelin kendi vhost proxy'si
+(`Host` header'ına bakarak) yapar — bu yüzden yeni bir proje yayınlamak
+cloudflared config'ini hiç değiştirmez, TLS her iki host türünde de
+otomatiktir (Let's Encrypt/Certbot adımı yok).
+
+**Bilinen sınırlamalar:**
+- `port` alanı zaten manuel/güvenilmeyen bir alan (bkz. yukarıdaki not) —
+  proje gerçekte o portu dinlemiyorsa yayınlama "başarılı" görünür ama
+  proxy 502 döner.
+- Yayınlanan bir projenin kendi WebSocket endpoint'i tam olarak
+  `/socket.io/` path'indeyse, panelin kendi Socket.io dinleyicisi (path
+  bazlı, Host bazlı değil) bu upgrade isteğini yanlışlıkla yakalayabilir —
+  dar bir kenar durum, bu sürümde çözülmedi.
 
 ## Kapsam Dışı Bırakılan Özellikler (Bilinçli MVP Sınırları)
 
 Aşağıdakiler UI'da "bu sürümde desteklenmiyor" olarak işaretlenir, sessizce
 atlanmaz:
 
-- Nginx/Caddy reverse proxy + otomatik Let's Encrypt SSL
+- ~~Nginx/Caddy reverse proxy + otomatik Let's Encrypt SSL~~ — artık
+  uygulandı, ama Nginx/Caddy/Certbot yerine uygulama-içi vhost proxy +
+  Cloudflare Tunnel ile (bkz. "Projeleri Herkese Açık Yayınlama").
 - systemd birim yönetimi (sadece PM2)
 - Python/statik proje çalıştırma (sadece tespit edilir)
 - "Ağ Ayarları" sekmesinden restart tetikleyen dinamik port değişimi
@@ -92,13 +167,24 @@ atlanmaz:
   son ~50 olaylık `deploy_events` özeti var)
 - Çok kullanıcılı kimlik doğrulama/yetkilendirme (tek paylaşılan token var)
 
+### Sonraki Adım Adayları (M9+, henüz tasarlanmadı)
+
+- Proje başına health/uptime kontrolü (çalışıyor mu, ne kadar süredir)
+- Cloudflare Analytics entegrasyonu (yayınlanan projelere kaç ziyaretçi geldiği)
+- Dosya/proje yedekleme
+- Proje listesinde durum/sağlığa göre sıralama
+- "Otomatik kod ekleme" — henüz ne anlama geldiği netleşmedi
+
 ## Doğrulama Durumu
 
 **Bu geliştirme ortamında gerçekten doğrulanan:**
-- Backend: 110 unit/integration testi (`npm test -w backend`) - tespit
+- Backend: 141 unit/integration testi (`npm test -w backend`) - tespit
   motoru, dosya yöneticisi, path-traversal/zip-slip/tar-slip koruması, git
   URL doğrulayıcı, tüm REST rotaları, gerçek bir `socket.io-client` ile
-  auth + oda + log/stats akışı.
+  auth + oda + log/stats akışı; ayrıca vhost proxy - **gerçek bir
+  `http.createServer` hedefine** karşı gerçek Host-header routing +
+  proxy'leme, canlı `status === 'running'` yeniden kontrolü, ve
+  publish/unpublish rotaları (PANEL_DOMAIN set/unset her iki durumda da).
 - **Gerçek PM2 ile canlı doğrulama** (mock değil): gerçek bir zip yüklendi,
   gerçek `npm install` çalıştı, gerçek PM2 süreci başlatıldı, uygulama
   gerçekten kendi portunda yanıt verdi, `pm2.describe()`'dan gerçek CPU/RAM
@@ -115,6 +201,13 @@ Bu ortamda Docker CLI ve Compose eklentisi kurulu ama çalışan bir daemon yok
 gözden geçirildi ve mock driver ile tüm akış (UI dahil) simüle edilerek
 denendi, ancak gerçek `docker compose up -d --build` çalıştırması ve gerçek
 `docker stats` sayıları doğrulanamadı.
+
+**Gerçek bir domain + Cloudflare hesabı gerektirir (bu sandbox'ta
+doğrulanamadı):** gerçek DNS wildcard yayılımı; gerçek bir Cloudflare
+Tunnel üzerinden genel internetten (örn. mobil veri ile) erişilebilirlik;
+yayınlanan bir projeye WebSocket upgrade'lerinin proxy'lenmesi (otomatik
+testte kapsanmadı, sadece kod incelemesiyle doğrulandı); QR kodu taratıp
+telefonda linkin gerçekten açılması.
 
 ### Gerçek Sunucuda Elle Doğrulama Kontrol Listesi
 

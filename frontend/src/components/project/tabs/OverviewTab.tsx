@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api, ApiError } from '../../../api/client';
 import { useProjectStats } from '../../../hooks/useProjectStats';
 import type { Project, ProjectStatus, ProjectType } from '../../../types/project';
+import { PublishSection } from '../PublishSection';
 
 const TYPE_LABELS: Record<ProjectType, string> = {
   docker: 'Docker',
@@ -152,6 +153,8 @@ export function OverviewTab({ project, onProjectChange }: Props) {
         </div>
         <p className="mt-1 text-xs text-gray-500">Port değişikliği bir sonraki başlatmada uygulanır.</p>
       </div>
+
+      <PublishSection project={project} onProjectChange={onProjectChange} />
     </div>
   );
 }

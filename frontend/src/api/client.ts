@@ -64,7 +64,7 @@ export interface ProjectPatch {
 }
 
 export const api = {
-  health: () => request<{ status: string }>('/health'),
+  health: () => request<{ status: string; panelDomain: string | null }>('/health'),
 
   listProjects: () => request<Project[]>('/projects'),
   getProject: (id: string) => request<Project>(`/projects/${id}`),
@@ -85,6 +85,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ name, repoUrl }),
     }),
+
+  publishProject: (id: string, subdomain?: string) =>
+    request<{ project: Project; url: string }>(`/projects/${id}/publish`, {
+      method: 'POST',
+      body: JSON.stringify(subdomain ? { subdomain } : {}),
+    }),
+  unpublishProject: (id: string) => request<Project>(`/projects/${id}/publish`, { method: 'DELETE' }),
 
   startProject: (id: string) => request<Project>(`/projects/${id}/actions/start`, { method: 'POST' }),
   stopProject: (id: string) => request<Project>(`/projects/${id}/actions/stop`, { method: 'POST' }),

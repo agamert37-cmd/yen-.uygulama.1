@@ -24,6 +24,7 @@ interface ProjectRow {
   status_message: string | null;
   pm2_process_name: string | null;
   compose_project_name: string | null;
+  subdomain: string | null;
   env_vars: string;
   created_at: string;
   updated_at: string;
@@ -52,6 +53,7 @@ function rowToProject(row: ProjectRow): Project {
     statusMessage: row.status_message,
     pm2ProcessName: row.pm2_process_name,
     composeProjectName: row.compose_project_name,
+    subdomain: row.subdomain,
     envVars: JSON.parse(row.env_vars) as Record<string, string>,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -77,11 +79,13 @@ export interface UpdateProjectPatch {
   statusMessage?: string | null;
   pm2ProcessName?: string | null;
   composeProjectName?: string | null;
+  subdomain?: string | null;
 }
 
 const SELECT_ALL = 'SELECT * FROM projects ORDER BY created_at DESC';
 const SELECT_BY_ID = 'SELECT * FROM projects WHERE id = ?';
 const SELECT_BY_SLUG = 'SELECT * FROM projects WHERE slug = ?';
+const SELECT_BY_SUBDOMAIN = 'SELECT * FROM projects WHERE subdomain = ?';
 
 export const projectsRepo = {
   create(input: CreateProjectInput): Project {
@@ -129,6 +133,11 @@ export const projectsRepo = {
     return row ? rowToProject(row) : undefined;
   },
 
+  findBySubdomain(subdomain: string): Project | undefined {
+    const row = db.prepare(SELECT_BY_SUBDOMAIN).get(subdomain) as ProjectRow | undefined;
+    return row ? rowToProject(row) : undefined;
+  },
+
   update(id: string, patch: UpdateProjectPatch): Project | undefined {
     const existing = projectsRepo.findById(id);
     if (!existing) return undefined;
@@ -150,6 +159,7 @@ export const projectsRepo = {
         patch.composeProjectName === undefined
           ? existing.composeProjectName
           : patch.composeProjectName,
+      subdomain: patch.subdomain === undefined ? existing.subdomain : patch.subdomain,
     };
 
     db.prepare(
@@ -165,6 +175,7 @@ export const projectsRepo = {
         status_message = @statusMessage,
         pm2_process_name = @pm2ProcessName,
         compose_project_name = @composeProjectName,
+        subdomain = @subdomain,
         updated_at = @updatedAt
       WHERE id = @id
       `,
@@ -180,6 +191,7 @@ export const projectsRepo = {
       statusMessage: next.statusMessage,
       pm2ProcessName: next.pm2ProcessName,
       composeProjectName: next.composeProjectName,
+      subdomain: next.subdomain,
       updatedAt: new Date().toISOString(),
     });
 

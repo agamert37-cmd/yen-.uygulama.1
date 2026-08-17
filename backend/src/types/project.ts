@@ -31,6 +31,7 @@ export interface Project {
   statusMessage: string | null;
   pm2ProcessName: string | null;
   composeProjectName: string | null;
+  subdomain: string | null;
   envVars: Record<string, string>;
   createdAt: string;
   updatedAt: string;

@@ -12,6 +12,14 @@ const envSchema = z.object({
   PANEL_AUTH_TOKEN: z
     .string()
     .min(8, 'PANEL_AUTH_TOKEN must be at least 8 characters'),
+  // Base domain running projects get published under (https://{subdomain}.PANEL_DOMAIN).
+  // Unset disables publishing entirely - the vhost proxy becomes a no-op.
+  PANEL_DOMAIN: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .min(1)
+    .optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
