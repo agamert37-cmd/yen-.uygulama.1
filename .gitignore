@@ -1,0 +1,25 @@
+node_modules/
+dist/
+build/
+*.log
+
+# backend runtime data (workspaces + sqlite db)
+backend/data/
+backend/workspaces/
+backend/*.sqlite
+backend/*.sqlite-journal
+backend/.tmp-test-workspaces-*/
+
+# env
+.env
+.env.local
+backend/.env
+frontend/.env
+
+# editors / OS
+.DS_Store
+.vscode/
+.idea/
+
+# test/coverage
+coverage/
