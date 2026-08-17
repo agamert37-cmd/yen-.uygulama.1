@@ -7,6 +7,7 @@ import type { Project } from '../types/project';
 export function ProjectListPage() {
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -21,7 +22,7 @@ export function ProjectListPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadToken]);
 
   return (
     <div>
@@ -32,7 +33,21 @@ export function ProjectListPage() {
         </Link>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && (
+        <div className="mb-4">
+          <p className="text-sm text-red-600">{error}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setReloadToken((t) => t + 1);
+            }}
+            className="mt-2 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Tekrar Dene
+          </button>
+        </div>
+      )}
 
       {!projects && !error && <p className="text-sm text-gray-500">Yükleniyor...</p>}
 

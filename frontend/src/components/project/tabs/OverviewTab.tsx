@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../../../api/client';
 import { useProjectStats } from '../../../hooks/useProjectStats';
 import type { Project, ProjectStatus, ProjectType } from '../../../types/project';
+import { PublishSection } from '../PublishSection';
 
 const TYPE_LABELS: Record<ProjectType, string> = {
   docker: 'Docker',
@@ -27,13 +29,20 @@ interface Props {
 }
 
 export function OverviewTab({ project, onProjectChange }: Props) {
+  const navigate = useNavigate();
   const stats = useProjectStats(project.id);
   const [portInput, setPortInput] = useState(project.port?.toString() ?? '');
   const [busy, setBusy] = useState(false);
+  const [savingPort, setSavingPort] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const canRun = RUNNABLE_TYPES.has(project.projectType);
   const isBusy = BUSY_STATUSES.has(project.status) || busy;
+  // The backend rejects both re-detect and delete while running (not just
+  // while mid-transition) - BUSY_STATUSES above deliberately excludes
+  // 'running' for the start/stop/restart buttons, so it's checked
+  // separately here rather than folded into isBusy.
+  const cannotModifyLifecycle = isBusy || project.status === 'running';
 
   async function runAction(action: 'start' | 'stop' | 'restart'): Promise<void> {
     setError(null);
@@ -50,6 +59,32 @@ export function OverviewTab({ project, onProjectChange }: Props) {
     }
   }
 
+  async function redetect(): Promise<void> {
+    setError(null);
+    setBusy(true);
+    try {
+      const updated = await api.redetectProject(project.id);
+      onProjectChange(updated);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Yeniden algılama başarısız oldu');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteProject(): Promise<void> {
+    if (!window.confirm(`"${project.name}" silinsin mi? Bu işlem geri alınamaz.`)) return;
+    setError(null);
+    setBusy(true);
+    try {
+      await api.deleteProject(project.id);
+      navigate('/');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Proje silinemedi');
+      setBusy(false);
+    }
+  }
+
   async function savePort(): Promise<void> {
     setError(null);
     const trimmed = portInput.trim();
@@ -58,11 +93,14 @@ export function OverviewTab({ project, onProjectChange }: Props) {
       return;
     }
     const port = trimmed === '' ? null : Number(trimmed);
+    setSavingPort(true);
     try {
       const updated = await api.patchProject(project.id, { port });
       onProjectChange(updated);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Port güncellenemedi');
+    } finally {
+      setSavingPort(false);
     }
   }
 
@@ -105,6 +143,24 @@ export function OverviewTab({ project, onProjectChange }: Props) {
         >
           Yeniden Başlat
         </button>
+        <button
+          type="button"
+          onClick={redetect}
+          disabled={cannotModifyLifecycle}
+          title={project.status === 'running' ? 'Yeniden algılamadan önce projeyi durdurun' : undefined}
+          className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Yeniden Algıla
+        </button>
+        <button
+          type="button"
+          onClick={deleteProject}
+          disabled={cannotModifyLifecycle}
+          title={project.status === 'running' ? 'Silmeden önce projeyi durdurun' : undefined}
+          className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Projeyi Sil
+        </button>
       </div>
 
       <dl className="grid grid-cols-2 gap-4 rounded-lg border border-gray-200 p-4 sm:grid-cols-4">
@@ -145,13 +201,16 @@ export function OverviewTab({ project, onProjectChange }: Props) {
           <button
             type="button"
             onClick={savePort}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            disabled={savingPort}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Kaydet
+            {savingPort ? 'Kaydediliyor...' : 'Kaydet'}
           </button>
         </div>
         <p className="mt-1 text-xs text-gray-500">Port değişikliği bir sonraki başlatmada uygulanır.</p>
       </div>
+
+      <PublishSection project={project} onProjectChange={onProjectChange} />
     </div>
   );
 }

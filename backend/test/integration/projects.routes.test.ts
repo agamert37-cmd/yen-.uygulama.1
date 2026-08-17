@@ -7,6 +7,8 @@ import { runMigrations } from '../../src/db/migrate';
 import { projectsRepo } from '../../src/db/repositories/projectsRepo';
 import { env } from '../../src/config/env';
 import { WORKSPACES_ROOT } from '../../src/config/paths';
+import { BUSY_STATUSES } from '../../src/modules/lifecycle/projectStateMachine';
+import { appendLog, getRecentLogs } from '../../src/modules/lifecycle/logBuffer';
 
 const app = createApp();
 const TOKEN = env.PANEL_AUTH_TOKEN;
@@ -106,18 +108,56 @@ describe('/api/projects', () => {
     expect(res.status).toBe(400);
   });
 
-  it('refuses to delete a running project', async () => {
+  it.each([...BUSY_STATUSES])('refuses to delete a project that is %s', async (status) => {
     const project = projectsRepo.create({
-      name: 'Running App',
-      slug: 'running-app',
-      dirPath: '/workspaces/running-app',
+      name: `Busy App (${status})`,
+      slug: `busy-app-${status}`,
+      dirPath: `/workspaces/busy-app-${status}`,
       sourceType: 'upload',
     });
-    projectsRepo.update(project.id, { status: 'running' });
+    projectsRepo.update(project.id, { status });
 
     const res = await request(app)
       .delete(`/api/projects/${project.id}`)
       .set('Authorization', `Bearer ${TOKEN}`);
+    expect(res.status).toBe(409);
+  });
+
+  it('deletes an idle project and clears its log buffer', async () => {
+    const project = projectsRepo.create({
+      name: 'Idle App',
+      slug: 'idle-app',
+      dirPath: '/workspaces/idle-app',
+      sourceType: 'upload',
+    });
+    appendLog(project.id, 'stdout', 'hello\n');
+    expect(getRecentLogs(project.id)).toHaveLength(1);
+
+    const res = await request(app)
+      .delete(`/api/projects/${project.id}`)
+      .set('Authorization', `Bearer ${TOKEN}`);
+    expect(res.status).toBe(204);
+    expect(getRecentLogs(project.id)).toEqual([]);
+  });
+
+  it('returns 409 when patching a project name to one that already exists', async () => {
+    const first = projectsRepo.create({
+      name: 'Taken Name',
+      slug: 'taken-name',
+      dirPath: '/workspaces/taken-name',
+      sourceType: 'upload',
+    });
+    const second = projectsRepo.create({
+      name: 'Other Name',
+      slug: 'other-name',
+      dirPath: '/workspaces/other-name',
+      sourceType: 'upload',
+    });
+
+    const res = await request(app)
+      .patch(`/api/projects/${second.id}`)
+      .set('Authorization', `Bearer ${TOKEN}`)
+      .send({ name: first.name });
     expect(res.status).toBe(409);
   });
 });

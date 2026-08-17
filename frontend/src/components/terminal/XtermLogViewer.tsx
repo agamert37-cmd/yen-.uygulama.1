@@ -46,9 +46,13 @@ export function XtermLogViewer({ lines }: { lines: LogLine[] }) {
   }, [lines]);
 
   return (
-    <div
-      ref={containerRef}
-      className="h-[500px] w-full overflow-hidden rounded-lg border border-gray-800 bg-slate-900 p-2"
-    />
+    <div className="relative h-[500px] w-full overflow-hidden rounded-lg border border-gray-800 bg-slate-900">
+      <div ref={containerRef} className="h-full w-full p-2" />
+      {lines.length === 0 && (
+        <p className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center text-sm text-gray-500">
+          Henüz log yok.
+        </p>
+      )}
+    </div>
   );
 }

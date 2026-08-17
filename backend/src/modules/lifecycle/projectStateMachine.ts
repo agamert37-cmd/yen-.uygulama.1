@@ -6,6 +6,7 @@ import type { Project, ProjectStatus } from '../../types/project';
 import { projectAbsPath } from '../workspace/workspaceManager';
 import { isPortFree } from '../portcheck/portChecker';
 import { appendLog } from './logBuffer';
+import { composeProjectNameFor } from '../docker/dockerOrchestrator';
 
 export interface PhaseChangeEvent {
   projectId: string;
@@ -58,7 +59,7 @@ function errorMessage(err: unknown): string {
 }
 
 const RUNNABLE_TYPES = new Set(['docker', 'node']);
-const BUSY_STATUSES = new Set<ProjectStatus>(['importing', 'detecting', 'installing', 'building', 'starting', 'running', 'stopping']);
+export const BUSY_STATUSES = new Set<ProjectStatus>(['importing', 'detecting', 'installing', 'building', 'starting', 'running', 'stopping']);
 
 /**
  * Validates preconditions and performs the first status transition
@@ -68,6 +69,13 @@ const BUSY_STATUSES = new Set<ProjectStatus>(['importing', 'detecting', 'install
  * the HTTP request must not block on it. Progress is observable via the
  * deploy-event trail, the log buffer/socket stream, and polling GET
  * /projects/:id.
+ *
+ * The status is claimed with `setStatus` *before* the async port check, not
+ * after: `isPortFree` genuinely yields to the event loop, so two concurrent
+ * calls for the same project would otherwise both pass the busy-status
+ * check above before either one wrote a new status. Claiming first means
+ * the second call's own busy-status check now sees the claim and rejects
+ * with 409 instead of racing into a second install/build/start sequence.
  */
 export async function startProject(projectId: string): Promise<Project> {
   const project = projectsRepo.findById(projectId);
@@ -78,13 +86,21 @@ export async function startProject(projectId: string): Promise<Project> {
   if (!RUNNABLE_TYPES.has(project.projectType)) {
     throw new HttpError(400, `Project type "${project.projectType}" cannot be started in this version`);
   }
-  if (project.port) {
-    const free = await isPortFree(project.port);
-    if (!free) throw new HttpError(409, `Port ${project.port} is already in use`);
-  }
 
   const initialStatus: ProjectStatus = project.projectType === 'docker' ? 'building' : 'installing';
   const updated = setStatus(projectId, initialStatus);
+
+  if (project.port) {
+    const free = await isPortFree(project.port);
+    if (!free) {
+      // Roll back to the status the project actually had before this call
+      // claimed it (idle/stopped/error) - never a hardcoded 'idle', since a
+      // failed retry on a stopped/errored project must not silently
+      // relabel it as idle.
+      setStatus(projectId, project.status, `Port ${project.port} is already in use`);
+      throw new HttpError(409, `Port ${project.port} is already in use`);
+    }
+  }
 
   void runStartSequence(projectId, project).catch(() => {
     // runStartSequence already records failures via setStatus/deploy_events;
@@ -101,8 +117,15 @@ async function runStartSequence(projectId: string, project: Project): Promise<vo
 
   try {
     if (project.projectType === 'docker') {
-      const { composeProjectName } = await driver.composeUp(project, absPath, output);
-      projectsRepo.update(projectId, { composeProjectName });
+      // Deterministic and known before compose even runs - persist it up
+      // front so composeDown/composeRestart/getComposeStats can still find
+      // a partially started compose project even if `docker compose up`
+      // exits non-zero partway through. Previously this was written only
+      // after composeUp resolved successfully, so a partial failure left
+      // an orphaned, untracked container nothing in the panel could
+      // discover again.
+      projectsRepo.update(projectId, { composeProjectName: composeProjectNameFor(project) });
+      await driver.composeUp(project, absPath, output);
     } else {
       await driver.installDependencies(project, absPath, output);
       setStatus(projectId, 'building');

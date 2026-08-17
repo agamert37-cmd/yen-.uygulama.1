@@ -8,6 +8,7 @@ import { db } from '../../src/db';
 import { runMigrations } from '../../src/db/migrate';
 import { env } from '../../src/config/env';
 import { WORKSPACES_ROOT } from '../../src/config/paths';
+import { projectsRepo } from '../../src/db/repositories/projectsRepo';
 
 const app = createApp();
 const TOKEN = env.PANEL_AUTH_TOKEN;
@@ -141,5 +142,21 @@ describe('POST /api/projects/:id/detect', () => {
       .set('Authorization', `Bearer ${TOKEN}`);
     expect(redetected.status).toBe(200);
     expect(redetected.body.projectType).toBe('node');
+  });
+
+  it('rejects re-detecting a project that is currently running', async () => {
+    const zipBuffer = buildZip({ 'index.html': '<html></html>' });
+    const created = await request(app)
+      .post('/api/projects/import/upload')
+      .set('Authorization', `Bearer ${TOKEN}`)
+      .field('name', 'Busy Redetect')
+      .attach('archive', zipBuffer, 'a.zip');
+
+    projectsRepo.update(created.body.id, { status: 'running' });
+
+    const res = await request(app)
+      .post(`/api/projects/${created.body.id}/detect`)
+      .set('Authorization', `Bearer ${TOKEN}`);
+    expect(res.status).toBe(409);
   });
 });

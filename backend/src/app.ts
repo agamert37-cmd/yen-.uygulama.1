@@ -10,10 +10,18 @@ import { filesRouter } from './routes/files.routes';
 import { healthRouter } from './routes/health.routes';
 import { importRouter } from './routes/import.routes';
 import { projectsRouter } from './routes/projects.routes';
+import { publishRouter } from './routes/publish.routes';
+import { vhostGate } from './modules/proxy/vhostProxy';
 import { logger } from './utils/logger';
 
 export function createApp(): express.Express {
   const app = express();
+
+  // MUST be first: published-project traffic bypasses the panel's own
+  // security headers/CORS/JSON parsing/auth guard entirely, and needs the
+  // raw (unconsumed) request stream for http-proxy-middleware to pipe. A
+  // no-op when PANEL_DOMAIN is unset (local/dev/test).
+  app.use(vhostGate);
 
   app.use(helmet());
   app.use(cors());
@@ -31,6 +39,7 @@ export function createApp(): express.Express {
   app.use('/api/projects/import', importRouter);
   app.use('/api/projects', actionsRouter);
   app.use('/api/projects', filesRouter);
+  app.use('/api/projects', publishRouter);
   app.use('/api/projects', projectsRouter);
 
   // Serve the built frontend from the same origin/port in production. Routers

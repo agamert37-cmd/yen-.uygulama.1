@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 
 type Mode = 'upload' | 'git';
@@ -44,13 +44,17 @@ export function NewProjectPage() {
 
   return (
     <div className="mx-auto max-w-xl">
+      <Link to="/" className="mb-4 inline-block text-sm text-gray-500 hover:text-gray-700">
+        ← Projeler
+      </Link>
+
       <h1 className="mb-6 text-xl font-semibold text-gray-900">Yeni Depo Oluştur</h1>
 
       <div className="mb-6 flex gap-2 rounded-lg bg-gray-100 p-1">
         <button
           type="button"
           onClick={() => setMode('upload')}
-          className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition ${
+          className={`flex-1 rounded-md px-3 py-2.5 text-sm font-medium transition ${
             mode === 'upload' ? 'bg-white text-gray-900 shadow' : 'text-gray-500'
           }`}
         >
@@ -59,7 +63,7 @@ export function NewProjectPage() {
         <button
           type="button"
           onClick={() => setMode('git')}
-          className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition ${
+          className={`flex-1 rounded-md px-3 py-2.5 text-sm font-medium transition ${
             mode === 'git' ? 'bg-white text-gray-900 shadow' : 'text-gray-500'
           }`}
         >
@@ -94,6 +98,9 @@ export function NewProjectPage() {
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
               className="mt-1 block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-gray-900 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-gray-800"
             />
+            <p className="mt-1 text-xs text-gray-500">
+              Telefondan yüklüyorsanız: dosya seçiciden Dosyalar/Drive üzerinden bir .zip/.tar.gz seçebilirsiniz.
+            </p>
           </div>
         ) : (
           <div>
@@ -116,7 +123,7 @@ export function NewProjectPage() {
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="w-full rounded-md bg-gray-900 px-4 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
         >
           {submitting ? 'İçe aktarılıyor...' : 'İçe Aktar'}
         </button>

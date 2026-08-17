@@ -6,6 +6,7 @@ import { OverviewTab } from '../components/project/tabs/OverviewTab';
 import { StatusBadge } from '../components/project/StatusBadge';
 import { useProjectRoom } from '../hooks/useProjectRoom';
 import { useSocket } from '../hooks/useSocket';
+import { useSocketStatus } from '../hooks/useSocketStatus';
 import type { Project, ProjectStatus } from '../types/project';
 
 // xterm.js and Monaco are both large; only one tab is visible at a time,
@@ -31,9 +32,11 @@ interface StatusChangeEvent {
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const socket = useSocket();
+  const socketStatus = useSocketStatus();
   const [project, setProject] = useState<Project | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>('overview');
+  const [reloadToken, setReloadToken] = useState(0);
 
   useProjectRoom(id ?? '');
 
@@ -51,7 +54,7 @@ export function ProjectDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, reloadToken]);
 
   // Both the direct REST responses (start/stop/restart via onProjectChange)
   // and this socket listener write into the same `project` state, so
@@ -71,7 +74,26 @@ export function ProjectDetailPage() {
   }, [socket, id]);
 
   if (!id) return null;
-  if (error) return <p className="text-sm text-red-600">{error}</p>;
+  if (error) {
+    return (
+      <div>
+        <Link to="/" className="mb-4 inline-block text-sm text-gray-500 hover:text-gray-700">
+          ← Projeler
+        </Link>
+        <p className="text-sm text-red-600">{error}</p>
+        <button
+          type="button"
+          onClick={() => {
+            setError(null);
+            setReloadToken((t) => t + 1);
+          }}
+          className="mt-2 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          Tekrar Dene
+        </button>
+      </div>
+    );
+  }
   if (!project) return <p className="text-sm text-gray-500">Yükleniyor...</p>;
 
   return (
@@ -85,11 +107,22 @@ export function ProjectDetailPage() {
         <StatusBadge status={project.status} />
       </div>
 
-      <div className="mb-6 flex gap-1 overflow-x-auto border-b border-gray-200">
+      {socketStatus === 'disconnected' && (
+        <div className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Bağlantı koptu, yeniden bağlanılıyor...
+        </div>
+      )}
+
+      <div
+        role="tablist"
+        className="mb-6 flex gap-1 overflow-x-auto border-b border-gray-200 [mask-image:linear-gradient(to_right,black_calc(100%-20px),transparent)]"
+      >
         {TABS.map((t) => (
           <button
             key={t.key}
             type="button"
+            role="tab"
+            aria-selected={tab === t.key}
             onClick={() => setTab(t.key)}
             className={`shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition ${
               tab === t.key ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700'
