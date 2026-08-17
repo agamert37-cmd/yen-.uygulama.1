@@ -71,6 +71,9 @@ export function writeFileContent(root: string, relativePath: string, content: st
     throw new HttpError(400, `Content is too large to save (max ${MAX_EDITABLE_FILE_BYTES} bytes)`);
   }
   const target = resolveWithinRoot(root, relativePath);
+  if (fs.existsSync(target) && fs.statSync(target).isDirectory()) {
+    throw new HttpError(400, 'Path is a directory, not a file');
+  }
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, content, 'utf8');
 }

@@ -45,6 +45,24 @@ function createNodeProjectDir(slug: string, scripts: Record<string, string>): st
   return absPath;
 }
 
+async function findFreePort(): Promise<number> {
+  const net = await import('node:net');
+  const server = net.createServer();
+  const port = await new Promise<number>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '0.0.0.0', () => {
+      const address = server.address();
+      if (address === null || typeof address === 'string') {
+        reject(new Error('expected AddressInfo'));
+        return;
+      }
+      resolve(address.port);
+    });
+  });
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  return port;
+}
+
 describe('startProject (node projects, mock driver)', () => {
   it('runs installing -> building -> starting -> running and records the pm2 process name', async () => {
     const slug = 'node-happy-path';
@@ -101,18 +119,12 @@ describe('startProject (node projects, mock driver)', () => {
   });
 
   it('rejects starting a project whose port is already taken', async () => {
+    const port = await findFreePort();
     const net = await import('node:net');
     const server = net.createServer();
-    const port = await new Promise<number>((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       server.once('error', reject);
-      server.listen(0, '0.0.0.0', () => {
-        const address = server.address();
-        if (address === null || typeof address === 'string') {
-          reject(new Error('expected AddressInfo'));
-          return;
-        }
-        resolve(address.port);
-      });
+      server.listen(port, '0.0.0.0', () => resolve());
     });
 
     const slug = 'node-port-conflict';
@@ -124,6 +136,40 @@ describe('startProject (node projects, mock driver)', () => {
     expect(projectsRepo.findById(project.id)?.status).toBe('idle');
 
     await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it('rolls back to the project status from before the claim, not a hardcoded idle', async () => {
+    const port = await findFreePort();
+    const net = await import('node:net');
+    const server = net.createServer();
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(port, '0.0.0.0', () => resolve());
+    });
+
+    const slug = 'node-port-conflict-from-error';
+    createNodeProjectDir(slug, { start: 'node index.js' });
+    const project = projectsRepo.create({ name: 'Retry From Error', slug, dirPath: slug, sourceType: 'upload' });
+    projectsRepo.update(project.id, { projectType: 'node', packageManager: 'npm', port, status: 'error' });
+
+    await expect(startProject(project.id)).rejects.toThrow(/already in use/);
+    expect(projectsRepo.findById(project.id)?.status).toBe('error');
+
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  it('only allows one of two concurrent start calls to succeed (no TOCTOU race)', async () => {
+    const port = await findFreePort();
+
+    const slug = 'node-concurrent-start';
+    createNodeProjectDir(slug, { start: 'node index.js' });
+    const project = projectsRepo.create({ name: 'Concurrent Start', slug, dirPath: slug, sourceType: 'upload' });
+    projectsRepo.update(project.id, { projectType: 'node', packageManager: 'npm', port });
+
+    const results = await Promise.allSettled([startProject(project.id), startProject(project.id)]);
+
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
   });
 
   it('rejects starting a project type that cannot run yet', async () => {
@@ -167,6 +213,33 @@ describe('startProject (docker projects, mock driver)', () => {
     const finished = await waitForStatus(project.id, ['running', 'error']);
     expect(finished.status).toBe('running');
     expect(finished.composeProjectName).toBe('docker-app');
+  });
+
+  it('persists composeProjectName before compose finishes, not only after it succeeds', async () => {
+    const project = projectsRepo.create({
+      name: 'Docker Ordering App',
+      slug: 'docker-ordering-app',
+      dirPath: 'docker-ordering-app',
+      sourceType: 'upload',
+    });
+    projectsRepo.update(project.id, { projectType: 'docker', hasComposeFile: true });
+
+    let nameAtFirstOutput: string | null | undefined;
+    const unsubscribe = onOutput((event) => {
+      if (event.projectId === project.id && nameAtFirstOutput === undefined) {
+        nameAtFirstOutput = projectsRepo.findById(project.id)?.composeProjectName ?? null;
+      }
+    });
+
+    await startProject(project.id);
+    await waitForStatus(project.id, ['running', 'error']);
+    unsubscribe();
+
+    // A partial `docker compose up` failure must still leave the name
+    // discoverable for composeDown/composeRestart/getComposeStats - so it
+    // has to be written before the first output even arrives, not after
+    // the whole sequence resolves.
+    expect(nameAtFirstOutput).toBe('docker-ordering-app');
   });
 });
 

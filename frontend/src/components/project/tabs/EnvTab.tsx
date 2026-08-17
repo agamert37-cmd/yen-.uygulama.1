@@ -71,7 +71,8 @@ export function EnvTab({ project, onProjectChange }: Props) {
             <button
               type="button"
               onClick={() => removeRow(index)}
-              className="px-1 text-gray-400 hover:text-red-600"
+              aria-label={row.key ? `"${row.key}" değişkenini sil` : 'Değişkeni sil'}
+              className="rounded px-2 py-1 text-gray-400 hover:text-red-600"
               title="Sil"
             >
               ✕

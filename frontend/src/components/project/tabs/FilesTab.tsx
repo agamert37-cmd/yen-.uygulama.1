@@ -9,7 +9,7 @@ function joinPath(dir: string, name: string): string {
 
 export function FilesTab({ projectId }: { projectId: string }) {
   const [currentPath, setCurrentPath] = useState('.');
-  const [entries, setEntries] = useState<DirEntry[]>([]);
+  const [entries, setEntries] = useState<DirEntry[] | null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [content, setContent] = useState('');
   const [dirty, setDirty] = useState(false);
@@ -34,6 +34,7 @@ export function FilesTab({ projectId }: { projectId: string }) {
   }
 
   async function openFile(name: string): Promise<void> {
+    if (dirty && !window.confirm('Kaydedilmemiş değişiklikler kaybolacak. Devam edilsin mi?')) return;
     const filePath = joinPath(currentPath, name);
     setError(null);
     try {
@@ -87,7 +88,8 @@ export function FilesTab({ projectId }: { projectId: string }) {
           )}
         </div>
         <ul className="max-h-[500px] overflow-y-auto">
-          {entries.map((entry) => (
+          {entries === null && <li className="px-3 py-4 text-center text-sm text-gray-400">Yükleniyor...</li>}
+          {entries?.map((entry) => (
             <li key={entry.name} className="flex items-center justify-between px-3 py-1.5 text-sm hover:bg-gray-50">
               <button
                 type="button"
@@ -101,14 +103,17 @@ export function FilesTab({ projectId }: { projectId: string }) {
               <button
                 type="button"
                 onClick={() => removeEntry(entry.name)}
-                className="ml-2 shrink-0 text-xs text-gray-400 hover:text-red-600"
+                aria-label={`"${entry.name}" öğesini sil`}
+                className="ml-2 shrink-0 rounded px-2 py-1 text-xs text-gray-400 hover:text-red-600"
                 title="Sil"
               >
                 ✕
               </button>
             </li>
           ))}
-          {entries.length === 0 && <li className="px-3 py-4 text-center text-sm text-gray-400">Boş</li>}
+          {entries !== null && entries.length === 0 && (
+            <li className="px-3 py-4 text-center text-sm text-gray-400">Boş</li>
+          )}
         </ul>
       </div>
 

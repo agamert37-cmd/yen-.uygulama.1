@@ -1,5 +1,6 @@
 import { hasScript } from '../modules/process/packageJson';
 import { pm2ProcessNameFor } from '../modules/process/pm2Orchestrator';
+import { composeProjectNameFor } from '../modules/docker/dockerOrchestrator';
 import type { OutputFn, ProjectDriver } from './types';
 
 function delay(ms: number): Promise<void> {
@@ -63,7 +64,7 @@ export const mockDriver: ProjectDriver = {
       ],
       onOutput,
     );
-    return { composeProjectName: project.slug };
+    return { composeProjectName: composeProjectNameFor(project) };
   },
 
   async composeDown() {

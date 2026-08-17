@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ensureComposeFile } from '../../src/modules/docker/dockerOrchestrator';
+import { composeProjectNameFor, ensureComposeFile } from '../../src/modules/docker/dockerOrchestrator';
 import type { Project } from '../../src/types/project';
 
 let tmpDir: string;
@@ -72,5 +72,11 @@ describe('ensureComposeFile', () => {
 
     const contents = fs.readFileSync(path.join(tmpDir, result), 'utf8');
     expect(contents).toContain('3000:3000');
+  });
+});
+
+describe('composeProjectNameFor', () => {
+  it('uses the project slug as the compose project name', () => {
+    expect(composeProjectNameFor(makeProject({ slug: 'my-slug' }))).toBe('my-slug');
   });
 });

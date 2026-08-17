@@ -52,13 +52,17 @@ function runCompose(args: string[], cwd: string, onOutput: OutputFn): Promise<vo
   });
 }
 
+export function composeProjectNameFor(project: Project): string {
+  return project.slug;
+}
+
 export async function composeUp(
   project: Project,
   projectDir: string,
   onOutput: OutputFn,
 ): Promise<{ composeProjectName: string }> {
   ensureComposeFile(project, projectDir);
-  const composeProjectName = project.slug;
+  const composeProjectName = composeProjectNameFor(project);
   await runCompose(['-p', composeProjectName, 'up', '-d', '--build'], projectDir, onOutput);
   return { composeProjectName };
 }

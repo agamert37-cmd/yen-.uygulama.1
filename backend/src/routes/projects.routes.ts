@@ -7,6 +7,8 @@ import { requireParam } from '../utils/params';
 import { detectProject } from '../modules/detection/detectionEngine';
 import { projectAbsPath, removeProjectDir } from '../modules/workspace/workspaceManager';
 import { writeEnvFile } from '../modules/files/fileManager';
+import { BUSY_STATUSES } from '../modules/lifecycle/projectStateMachine';
+import { clearLogs } from '../modules/lifecycle/logBuffer';
 
 export const projectsRouter = Router();
 
@@ -43,6 +45,9 @@ projectsRouter.post(
     const id = requireParam(req, 'id');
     const existing = projectsRepo.findById(id);
     if (!existing) throw new HttpError(404, 'Project not found');
+    if (BUSY_STATUSES.has(existing.status)) {
+      throw new HttpError(409, `Cannot re-detect while project is ${existing.status}`);
+    }
 
     const result = detectProject(projectAbsPath(existing.dirPath));
     const updated = projectsRepo.update(id, {
@@ -76,6 +81,9 @@ projectsRouter.patch(
     const existing = projectsRepo.findById(id);
     if (!existing) throw new HttpError(404, 'Project not found');
     const patch = patchSchema.parse(req.body);
+    if (patch.name && projectsRepo.findAll().some((p) => p.id !== id && p.name === patch.name)) {
+      throw new HttpError(409, 'A project with this name already exists');
+    }
     const updated = projectsRepo.update(id, patch);
     // The Env tab's source of truth at runtime is the .env file on disk
     // (what Docker Compose/PM2 actually read) - keep it in sync whenever
@@ -93,11 +101,12 @@ projectsRouter.delete(
     const id = requireParam(req, 'id');
     const existing = projectsRepo.findById(id);
     if (!existing) throw new HttpError(404, 'Project not found');
-    if (existing.status === 'running' || existing.status === 'starting') {
+    if (BUSY_STATUSES.has(existing.status)) {
       throw new HttpError(409, 'Stop the project before deleting it');
     }
     removeProjectDir(existing.dirPath);
     projectsRepo.remove(id);
+    clearLogs(id);
     res.status(204).send();
   }),
 );

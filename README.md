@@ -167,24 +167,33 @@ atlanmaz:
   son ~50 olaylık `deploy_events` özeti var)
 - Çok kullanıcılı kimlik doğrulama/yetkilendirme (tek paylaşılan token var)
 
-### Sonraki Adım Adayları (M9+, henüz tasarlanmadı)
+### Sonraki Adım Adayları (M10+, henüz tasarlanmadı)
 
 - Proje başına health/uptime kontrolü (çalışıyor mu, ne kadar süredir)
 - Cloudflare Analytics entegrasyonu (yayınlanan projelere kaç ziyaretçi geldiği)
 - Dosya/proje yedekleme
 - Proje listesinde durum/sağlığa göre sıralama
 - "Otomatik kod ekleme" — henüz ne anlama geldiği netleşmedi
+- Uygulama geneli erişilebilirlik geçişi (M9 sadece sekme çubuğu ve silme
+  butonlarındaki en yüksek değerli iki noktayı düzeltti; input'larda hâlâ
+  belirgin bir focus göstergesi yok)
 
 ## Doğrulama Durumu
 
 **Bu geliştirme ortamında gerçekten doğrulanan:**
-- Backend: 141 unit/integration testi (`npm test -w backend`) - tespit
+- Backend: 155 unit/integration testi (`npm test -w backend`) - tespit
   motoru, dosya yöneticisi, path-traversal/zip-slip/tar-slip koruması, git
   URL doğrulayıcı, tüm REST rotaları, gerçek bir `socket.io-client` ile
   auth + oda + log/stats akışı; ayrıca vhost proxy - **gerçek bir
   `http.createServer` hedefine** karşı gerçek Host-header routing +
   proxy'leme, canlı `status === 'running'` yeniden kontrolü, ve
   publish/unpublish rotaları (PANEL_DOMAIN set/unset her iki durumda da).
+  M9 kapsamında eklenenler: tüm meşgul durumlarda silme/yeniden-tespit
+  koruması, `startProject`'in eşzamanlı çağrılara karşı yarış durumu
+  düzeltmesi (gerçek `Promise.allSettled` regresyon testi), ve kısmen
+  başarısız `docker compose up`'ın `composeProjectName`'i hâlâ
+  kaydettiğini kanıtlayan bir sıralama regresyon testi.
+- Frontend: 30 component/hook testi (`npm test -w frontend`, Vitest + RTL).
 - **Gerçek PM2 ile canlı doğrulama** (mock değil): gerçek bir zip yüklendi,
   gerçek `npm install` çalıştı, gerçek PM2 süreci başlatıldı, uygulama
   gerçekten kendi portunda yanıt verdi, `pm2.describe()`'dan gerçek CPU/RAM
@@ -193,7 +202,14 @@ atlanmaz:
   listesi → içe aktarma → tespit → başlatma → canlı log/istatistik → dosya
   gezgini + Monaco editör → ortam değişkenleri → durdurma → listeye dönüş
   akışının tamamı hem geliştirme (Vite dev + proxy) hem de üretim
-  (`npm run build` + tek portlu Express) modunda test edildi.
+  (`npm run build` + tek portlu Express) modunda test edildi. M9'un arayüz
+  düzeltmeleri de aynı şekilde gerçek bir tarayıcıda tek tek gezildi:
+  Loglar sekmesinin boş durumu, Dosyalar sekmesinde kaydedilmemiş
+  değişiklikle başka dosyaya geçerken çıkan onay diyaloğu, çalışan bir
+  projede Yeniden Algıla/Projeyi Sil butonlarının pasifleştiği, ve dar bir
+  ekranda sekme çubuğunun taştığını gösteren kenar solması - bu son ikisi
+  otomatik testlerde yakalanamayan, sadece gerçek tarayıcıda görülebilen
+  birer hataydı ve burada bulunup düzeltildi.
 
 **Gerçek bir Docker host'u gerektirir (bu sandbox'ta doğrulanamadı):**
 Bu ortamda Docker CLI ve Compose eklentisi kurulu ama çalışan bir daemon yok

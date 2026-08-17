@@ -113,6 +113,16 @@ describe('file manager routes', () => {
     expect(fs.existsSync(path.join(WORKSPACES_ROOT, 'escape.txt'))).toBe(false);
   });
 
+  it('rejects writing to a path that is an existing directory', async () => {
+    const project = createProjectWithFiles('write-onto-dir', { 'src/index.js': 'console.log(1)' });
+
+    const res = await request(app)
+      .put(`/api/projects/${project.id}/files/content`)
+      .set('Authorization', `Bearer ${TOKEN}`)
+      .send({ path: 'src', content: 'oops' });
+    expect(res.status).toBe(400);
+  });
+
   it('404s for an unknown project id', async () => {
     const res = await request(app)
       .get('/api/projects/does-not-exist/files')
